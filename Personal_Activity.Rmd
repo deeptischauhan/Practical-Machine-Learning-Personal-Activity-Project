@@ -1,0 +1,167 @@
+---
+title: "Personal Activity"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+```
+# Practical Machine Learning Project
+## Personal Activity Analysis
+
+### Executive Summary
+The main goal of the project is to predict the manner in which 6 participants performed some exercise as described below. This is the “classe” variable in the training set. The machine learning algorithm described here is applied to the 20 test cases available in the test data and the predictions are submitted as under:- 
+
+#### [1] B A B A A E D B A A B C B A E E A B B B
+
+The 3 regression models choosen, along with their accuracy, are listed below
+
+Random Forest : 0.9963
+Decision Tree : 0.7368
+GBM : 0.9839
+
+Since Random Forest was found to be the most accurate, the same was applied to the testing set to get the output. 
+
+### Project Details 
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: [LINK](http://groupware.les.inf.puc-rio.br/har) (see the section on the Weight Lifting Exercise Dataset).
+
+### Data
+The training data for this project are available here: [Training Data](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv)
+
+The test data are available here:[Testing Data](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv)
+
+The data for this project come from this source: [LINK](http://groupware.les.inf.puc-rio.br/har). If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment.
+
+#### Setting up 
+```{r setup, echo=TRUE}
+library(knitr)
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+library(randomForest)
+library(corrplot)
+set.seed(12345)
+```
+#### Loading Data
+```{r echo = TRUE}
+training <- read.csv("pml-training.csv")
+testing  <- read.csv("pml-testing.csv")
+```
+#### Creating a partition within the training dataset 
+```{r echo = TRUE}
+inTrain  <- createDataPartition(training$classe, p=0.7, list=FALSE)
+TrainSet <- training[inTrain, ]
+TestSet  <- training[-inTrain, ]
+dim(TrainSet)
+dim(TestSet)
+```
+### Pre-processing Data
+#### Removing variables with Nearly Zero Variance
+```{r echo = TRUE}
+NZV <- nearZeroVar(TrainSet)
+TrainSet <- TrainSet[, -NZV]
+TestSet  <- TestSet[, -NZV]
+dim(TrainSet)
+dim(TestSet)
+```
+#### Removing variables that are mostly NA
+```{r echo = TRUE}
+AllNA    <- sapply(TrainSet, function(x) mean(is.na(x))) > 0.95
+TrainSet <- TrainSet[, AllNA==FALSE]
+TestSet  <- TestSet[, AllNA==FALSE]
+dim(TrainSet)
+dim(TestSet)
+```
+#### Removing identification only variables (columns 1 to 5)
+```{r echo = TRUE}
+TrainSet <- TrainSet[, -(1:5)]
+TestSet  <- TestSet[, -(1:5)]
+dim(TrainSet)
+dim(TestSet)
+```
+
+### Exploratory Analysis
+```{r echo = TRUE}
+corMatrix <- cor(TrainSet[, -54])
+corrplot(corMatrix, order = "FPC", method = "color", type = "lower", 
+         tl.cex = 0.8, tl.col = rgb(0, 0, 0))
+```
+
+### First Model - Random Forest
+```{r echo = TRUE}
+set.seed(12345)
+controlRF <- trainControl(method="cv", number=3, verboseIter=FALSE)
+modFitRandForest <- train(classe ~ ., data=TrainSet, method="rf",
+                          trControl=controlRF)
+modFitRandForest$finalModel
+```
+
+#### Predicting on Test dataset
+```{r echo = TRUE}
+predictRandForest <- predict(modFitRandForest, newdata=TestSet)
+confMatRandForest <- confusionMatrix(predictRandForest, TestSet$classe)
+confMatRandForest
+```
+
+#### Ploting results
+```{r echo = TRUE}
+plot(confMatRandForest$table, col = confMatRandForest$byClass, 
+     main = paste("Random Forest - Accuracy =",
+                  round(confMatRandForest$overall['Accuracy'], 4)))
+```
+
+### Second Model - Decision Tree
+```{r echo = TRUE}
+set.seed(12345)
+modFitDecTree <- rpart(classe ~ ., data=TrainSet, method="class")
+fancyRpartPlot(modFitDecTree)
+```
+
+#### Predicting on Test dataset
+```{r echo = TRUE}
+predictDecTree <- predict(modFitDecTree, newdata=TestSet, type="class")
+confMatDecTree <- confusionMatrix(predictDecTree, TestSet$classe)
+confMatDecTree
+```
+
+#### Ploting results
+```{r echo = TRUE}
+plot(confMatDecTree$table, col = confMatDecTree$byClass, 
+     main = paste("Decision Tree - Accuracy =",
+                  round(confMatDecTree$overall['Accuracy'], 4)))
+```
+
+### Third Model - GBM
+```{r echo = TRUE}
+set.seed(12345)
+controlGBM <- trainControl(method = "repeatedcv", number = 5, repeats = 1)
+modFitGBM  <- train(classe ~ ., data=TrainSet, method = "gbm",
+                    trControl = controlGBM, verbose = FALSE)
+modFitGBM$finalModel
+```
+
+#### Predicting on Test dataset
+```{r echo = TRUE}
+predictGBM <- predict(modFitGBM, newdata=TestSet)
+confMatGBM <- confusionMatrix(predictGBM, TestSet$classe)
+confMatGBM
+```
+
+#### Ploting results
+```{r echo = TRUE}
+plot(confMatGBM$table, col = confMatGBM$byClass, 
+     main = paste("GBM - Accuracy =", round(confMatGBM$overall['Accuracy'], 4)))
+```
+
+The accuracy of the 3 regression modeling methods above are:
+
+1. Random Forest : 99%
+2. Decision Tree : 74%
+3. GBM : 98%
+In that case, the Random Forest model will be applied to predict the 20 cases in the testing dataset
+
+### Predicting on Testing dataset
+```{r echo = TRUE}
+predictTEST <- predict(modFitRandForest, newdata=testing)
+predictTEST
+```
